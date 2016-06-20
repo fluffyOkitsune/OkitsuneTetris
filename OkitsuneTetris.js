@@ -8,21 +8,38 @@
 	var gametime;		// タイマー
 	var time;			// テトリミノの落下間隔
 
+	var ctrl;
+
+	var animTime = [];	// アニメ再生時間
+
+	var state;			// ゲームの進行状態
+	var STATE = {
+		INTRO : 0, GAME : 1, GAMEOVER : 2
+	}
+
 	var field = [];		// テトリミノを置くフィールド
 	var speed;			// 落下スピード
 	var next = [];		// 次に出てくるテトリミノ
+	var numNext;
+
+	var shadow;			// テトリミノの影
 
 	var type;			// 操作するテトリミノのタイプ
 						// O,T,S,Z,L,J,I + おきつね
 	var centerX, centerY;	// 今動かしているテトリミノの中心位置
-	var x = [], y = [];
-	var rotate;				// 回転回数
+	var roundX = [], roundY = [];		// テトリミノの中心以外
+
+	var pressedOkitsuneX = [];	// 潰されているおきつねの座標
+	var pressedOkitsuneY = [];
+	var pressedAnimTime;		// つぶされアニメ再生時間
 
 	var item = [];		// アイテムゲットフラグ
 	var numOkitsune;	// 出現したおきつねの数
 	var clearOkitsune;	// 消したおきつねの数
-	var curse;			// おきつねの呪いターン数
+	var curseType;		// おきつねの呪いタイプ
+	var curseTurn;		// おきつねの呪いターン数
 
+	var line;			// 消したライン数
 	var score;			// スコア
 	var highscore;		// ハイスコア
 
@@ -34,40 +51,91 @@
 	var IMAGE_OKITSUNE = new Image();
 	IMAGE_OKITSUNE.src = 'okitsune.gif';
 
-	// イベント
-	document.onkeydown = function (e){
-		e.preventDefault();
-		key = event.keyCode;
-		switch(key){
-			case 32 : // Space 左回転
-				for(var i=0 ; i<3 ; i++){
-					var X = x[i];
-					var Y = y[i];
-					x[i] = -Y;
-					y[i] = X;
-				}
-				break;
-			case 37 : // ← 左移動
-				if(canMoveLeft())
-					centerX--;
-				break;
-			case 38 : // ↑ ハードドロップ
-				hardDropTetromino();
-				break;
-			case 39 : // → 右移動
-				if(canMoveRight())
-					centerX++;
-				break;
+	// NEXT用テトリミノ画像
+	var IMAGE_TETROMINO = new Image();
+	IMAGE_TETROMINO.src = 'tetromino.gif';
 
-			case 40 : // ↓ 高速落下
-				dropTetromino();
-				break;
-		}	
+	// ----------------------------------------------------------------------
+	// イベント
+	// ----------------------------------------------------------------------
+	document.onkeydown = function (e){
+		if(ctrl){
+			e.preventDefault();
+			key = event.keyCode;
+
+			switch(state){
+				case STATE["INTRO"] : 
+					switch(key){
+						case 32 : // Space ゲーム開始
+							reStart();
+							state = STATE["GAME"];
+							makeTetromino();
+							break;
+					}
+					break;
+
+				case STATE["GAME"] : 
+					switch(key){
+					case 32 : // Space 左回転
+						if(canRotate()){
+							// 回転の計算
+							for(var i=0 ; i<3 ; i++){
+								var X = roundX[i];
+								var Y = roundY[i];
+								roundX[i] = -Y;
+								roundY[i] = X;
+							}
+							shadow = posShadow();
+						}
+						break;
+					case 37 : // ← 左移動
+						if(canMoveLeft()){
+							centerX--;
+							shadow = posShadow();
+						}
+						break;
+					case 38 : // ↑ ハードドロップ
+						hardDropTetromino();
+						break;
+					case 39 : // → 右移動
+						if(canMoveRight()){
+							centerX++;
+							shadow = posShadow();
+						}
+						break;
+					case 40 : // ↓ 高速落下
+						dropTetromino();
+						break;
+					}
+					break;
+
+				case STATE["GAMEOVER"] : 
+					switch(key){
+						case 32 : // Space タイトルへ
+							state = STATE["INTRO"];
+							break;
+					}
+					break;
+			}
+		}
 	}
 
 	// 開始
 	init();
 	window.requestAnimationFrame(loop);
+
+	// 回転できるか
+	function canRotate(){
+		for(var i=0 ; i<3 ; i++){
+			var X = roundX[i];
+			var Y = roundY[i];
+			var TO_X = centerX - Y;
+			var TO_Y = centerY + X;
+			if(!(0<= TO_X && TO_X<10 && 0<=TO_Y && TO_Y<20))
+				return false;
+		}
+		return true;
+	}
 
 	// ゲームループ
 	function loop(){
@@ -80,17 +148,32 @@
 	// 初期化
 	// ----------------------------------------------------------------------
 	function init(){
-		// タイマーリセット
 		gametime = 0;
+		highscore = 0;
+
+		for(var i = 0 ; i < 3 ; i++){
+			pressedOkitsuneX[i] = -1;
+			pressedOkitsuneY[i] = -1;
+		}
+		pressedAnimTime = 0;
+
+		state = STATE["INTRO"];
+		reStart();
+	}
+
+	// ゲームオーバー後にリトライ
+	function reStart(){
 		time = 0;
 
+		numNext = 0;
 		numOkitsune = 0;
 		clearOkitsune = 0;
 		curse = 0;
 		score = 0;
-		highscore = 0;
 
 		speed = 1;
+
+		item = [false];
 
 		// フィールドの初期化
 		for (var i = 0 ; i < 10; i++){
@@ -105,7 +188,6 @@
 		for(var i=0 ; i<5 ; i++){
 			next[i] = ramdomType();
 		}
-		makeTetromino();
 	}
 
 	function ramdomType(){
@@ -126,16 +208,51 @@
 	// 更新
 	// ----------------------------------------------------------------------
 	function update(){
-		if(time>180/speed){
-			time = 0;
-			dropTetromino();
-
-		}else{
-			time++;	
+		switch(state){
+			case STATE["INTRO"] : 
+				intro();
+				break;
+			case STATE["GAME"] : 
+				game();
+				break;
+			case STATE["GAMEOVER"] : 
+				gameover();
+				break;
 		}
 		gametime++;
 	}
 
+	// ゲーム開始前の状態
+	function intro(){
+		ctrl = true;
+	}
+
+	// ゲーム中の状態
+	function game(){
+		if(time > 180/speed){
+			time = 0;
+			dropTetromino();
+		}else{
+			time++;	
+		}
+	}
+
+	// ゲームオーバーの状態
+	function gameover(){
+	}
+
+	// アイテムゲット
+	function getItem(){
+		// 影
+		if(!item[0] && Math.floor(Math.random()*2) == 0){
+			item[0] = true;
+		} else if(numNext < 5 && Math.floor(Math.random()*2) == 0){
+		// NEXT追加
+			numNext++;
+			return;		
+		}
+	}
+	// ----------------------------------------------------------------------
 	// テトリミノの生成
 	function makeTetromino(){
 		type = next[0];
@@ -151,130 +268,213 @@
 		centerX = 5;
 		centerY = 1;
 
-		console.log(type);
-
 		// 生成するテトリミノの種類
 		switch(type){
 			case 'O' :
-				x[0] = -1;
-				y[0] = 0;
-				x[1] = -1;
-				y[1] = 1;
-				x[2] = 0;
-				y[2] = 1;
+				roundX[0] = -1;
+				roundY[0] = 0;
+				roundX[1] = -1;
+				roundY[1] = 1;
+				roundX[2] = 0;
+				roundY[2] = 1;
 				break;
 			case 'T' :
-				x[0] = -1;
-				y[0] = 0;
-				x[1] = 0;
-				y[1] = 1;
-				x[2] = 1;
-				y[2] = 0;
+				roundX[0] = -1;
+				roundY[0] = 0;
+				roundX[1] = 0;
+				roundY[1] = 1;
+				roundX[2] = 1;
+				roundY[2] = 0;
 				break;
 			case 'S' :
-				x[0] = -1;
-				y[0] = -1;
-				x[1] = -1;
-				y[1] = 0;
-				x[2] = 0;
-				y[2] = 1;
+				roundX[0] = -1;
+				roundY[0] = -1;
+				roundX[1] = -1;
+				roundY[1] = 0;
+				roundX[2] = 0;
+				roundY[2] = 1;
 				break;
 			case 'Z' :
-				x[0] = -1;
-				y[0] = -1;
-				x[1] = 0;
-				y[1] = -1;
-				x[2] = 1;
-				y[2] = 0;
+				roundX[0] = -1;
+				roundY[0] = -1;
+				roundX[1] = 0;
+				roundY[1] = -1;
+				roundX[2] = 1;
+				roundY[2] = 0;
 				break;
 			case 'L' :
-				x[0] = 0;
-				y[0] = -1;
-				x[1] = 0;
-				y[1] = 1;
-				x[2] = 1;
-				y[2] = 1;
+				roundX[0] = 0;
+				roundY[0] = -1;
+				roundX[1] = 0;
+				roundY[1] = 1;
+				roundX[2] = 1;
+				roundY[2] = 1;
 				break;
 			case 'J' :
-				x[0] = 0;
-				y[0] = -1;
-				x[1] = 0;
-				y[1] = 1;
-				x[2] = -1;
-				y[2] = 1;
+				roundX[0] = 0;
+				roundY[0] = -1;
+				roundX[1] = 0;
+				roundY[1] = 1;
+				roundX[2] = -1;
+				roundY[2] = 1;
 				break;
 			case 'I' :
-				x[0] = 0;
-				y[0] = -1;
-				x[1] = 0;
-				y[1] = 1;
-				x[2] = 0;
-				y[2] = 2;
+				roundX[0] = 0;
+				roundY[0] = -1;
+				roundX[1] = 0;
+				roundY[1] = 1;
+				roundX[2] = 0;
+				roundY[2] = 2;
 				break;
 			case 'F' :
-				x[0] = 0;
-				y[0] = 0;
-				x[1] = 0;
-				y[1] = 0;
-				x[2] = 0;
-				y[2] = 0;
+				roundX[0] = 0;
+				roundY[0] = 0;
+				roundX[1] = 0;
+				roundY[1] = 0;
+				roundX[2] = 0;
+				roundY[2] = 0;
+				numOkitsune++;
 				break;
 		}
+		shadow = posShadow();
 	}
 
 	// テトリミノの落下
 	function dropTetromino(){
-		centerY++;
-		if(fixTetromino()){
-			makeTetromino();
+		var b = fixTetromino();
+		if(!b){
+			shadow = posShadow();
+			pressOkitsune();
+			centerY++;
 		}
+		return b;
 	}
 
-	// テトリミノの落下
-	function hardDropTetromino(){
-		while(!fixTetromino()){
-		centerY++;
+	// テトリミノの影の位置計算
+	function posShadow(){
+		var POS_X = [centerX, centerX + roundX[0], centerX + roundX[1], centerX + roundX[2]];
+		var POS_Y = [centerY, centerY + roundY[0], centerY + roundY[1], centerY + roundY[2]];
+		
+		// ブロックまでの距離
+		for (var i = centerY ; i < 19 ; i++){
+			if(	field[POS_X[0]][i] != 'F' && field[POS_X[0]][i] != '_' || 
+				(i + roundY[0]) < 20 && field[POS_X[1]][i + roundY[0]] != 'F' && field[POS_X[1]][i + roundY[0]] != '_' ||  
+				(i + roundY[1]) < 20 && field[POS_X[2]][i + roundY[1]] != 'F' && field[POS_X[2]][i + roundY[1]] != '_' ||  
+				(i + roundY[2]) < 20 && field[POS_X[3]][i + roundY[2]] != 'F' && field[POS_X[3]][i + roundY[2]] != '_' ){
+				return i - 1;
+			}
 		}
-		makeTetromino();
+
+		// 一番下までの距離
+		var d = POS_Y[0];
+		for (var i = 1; i < 4 ; i++){
+			if(d < POS_Y[i])
+				d = POS_Y[i];
+		}
+		return 19 - (d - centerY);
+	}
+
+	// テトリミノのハードドロップ
+	function hardDropTetromino(){
+		ctrl = false;
+		while(!dropTetromino()){
+		}
+		ctrl = true;
+	}
+
+	// おきつねをつぶす
+	function pressOkitsune(){
+		var POS_X = [centerX, centerX + roundX[0], centerX + roundX[1], centerX + roundX[2]];
+		var POS_Y = [centerY, centerY + roundY[0], centerY + roundY[1], centerY + roundY[2]];
+
+		// 落下先
+		var FIELD = [];
+		for(var i = 0 ; i < 4 ; i++){
+			FIELD[i] = field[POS_X[i]][POS_Y[i] + 1];
+		}
+
+		// おきつねの１マス上
+		for(var i = 0 ; i < 4 ; i++){
+			if(FIELD[i] == 'F'){
+				field[POS_X[i]][POS_Y[i] + 1] = '_';
+				curseType = Math.floor(Math.random()*(5 + 1));
+				curseTurn = 3 + Math.floor(Math.random()*(4 + 1));
+			}
+		}
 	}
 
 	// テトリミノの固着
 	function fixTetromino(){
-		// 接地した場合
-		if(	
-			centerY == 19  || 
-			centerY + y[0] == 19 || 
-			centerY + y[1] == 19 || 
-			centerY + y[2] == 19
-			){
+		if(!canFall()){
+			// ゲームオーバー判定
+			if(centerY <= 2){
+				state = STATE["GAMEOVER"];
+				return true;
+			}
+
+			// フィールドに書き込む
 			field[centerX][centerY] = type;
-			field[centerX + x[0]][centerY + y[0]] = type;
-			field[centerX + x[1]][centerY + y[1]] = type;
-			field[centerX + x[2]][centerY + y[2]] = type;
-		return true;
+			field[centerX + roundX[0]][centerY + roundY[0]] = type;
+			field[centerX + roundX[1]][centerY + roundY[1]] = type;
+			field[centerX + roundX[2]][centerY + roundY[2]] = type;
+
+			// ラインを消去
+			elaseLine();
+
+			// 新しいテトリミノを生成
+			makeTetromino();
+
+			return true;
+		}
+		return false;
+	}
+
+	// テトリミノが下に落ちれるかどうか
+	function canFall(){
+		var POS_X = [centerX, centerX + roundX[0], centerX + roundX[1], centerX + roundX[2]];
+		var POS_Y = [centerY, centerY + roundY[0], centerY + roundY[1], centerY + roundY[2]];
+
+		// 落下先
+		var FIELD = [];
+		for(var i = 0 ; i < 4 ; i++){
+			FIELD[i] = field[POS_X[i]][POS_Y[i] + 1];
+		}
+		
+		// 接地した場合
+		for(var i = 0 ; i < 4 ; i++){
+			if(POS_Y[i] == 20)
+				return false;
+		}
 
 		// 他のブロックと接触
-		}else if(
-			field[centerX][centerY + 1] != '_'  || 
-			field[centerX + x[0]][centerY + y[0] + 1] != '_'  || 
-			field[centerX + x[1]][centerY + y[1] + 1] != '_'  || 
-			field[centerX + x[2]][centerY + y[2] + 1] != '_' 
-			){
-			field[centerX][centerY] = type;
-			field[centerX + x[0]][centerY + y[0]] = type;
-			field[centerX + x[1]][centerY + y[1]] = type;
-			field[centerX + x[2]][centerY + y[2]] = type;
-		return true;
+		for(var i = 0 ; i < 4 ; i++){
+			if(FIELD[i] != '_' && FIELD[i] != 'F')
+				return false;
 		}
-	return false;
+		return true;
 	}
 
 	// ラインを消去
 	function elaseLine(){
-		for (var j = 0; j < Things.length; j++) {
+		for (var j = 19; j > 0 ; j--) {
 			if(checkLine(j)){
 				// ラインをずらす
-				
+				for (var k = j; k > 0 ; k--) {
+					for (var i = 0; i < 10 ; i++){
+						// おきつねをカウント
+						if(field[i][k] == 'F'){
+							clearOkitsune++;
+							getItem();
+						}
+						// 最上段
+						if(k > 0)
+							field[i][k] = field[i][k - 1];
+						else
+							field[i][k] = '_';
+					}
+				}
+			// 消した後にずれた部分もチェックしなきゃね
+			j++;
 			}
 		}
 	}
@@ -287,21 +487,24 @@
 		}
 		return true;
 	}
+
+	// ----------------------------------------------------------------------
 	// 左に移動できるか
 	function canMoveLeft(){
-		if(centerX == 0  || centerX + x[0] == 0 || centerX + x[1] == 0 || centerX + x[2] == 0 )
+		if(centerX == 0  || centerX + roundX[0] == 0 || centerX + roundX[1] == 0 || centerX + roundX[2] == 0 )
 			return false;
-		else if(field[centerX - 1][centerY] != '_'  || field[centerX + x[0] - 1][centerY + y[0]] != '_'  || 
-				field[centerX + x[1] - 1][centerY + y[1]] != '_'  || field[centerX + x[2] - 1][centerY + y[2]] != '_' )
+		else if(field[centerX - 1][centerY] != '_'  || field[centerX + roundX[0] - 1][centerY + roundY[0]] != '_'  || 
+				field[centerX + roundX[1] - 1][centerY + roundY[1]] != '_'  || field[centerX + roundX[2] - 1][centerY + roundY[2]] != '_' )
 			return false;
 		return true;
 	}
+
 	// 右に移動できるか
 	function canMoveRight(){
-		if(centerX == 9  || centerX + x[0] == 9 || centerX + x[1] == 9 || centerX + x[2] == 9 )
+		if(centerX == 9  || centerX + roundX[0] == 9 || centerX + roundX[1] == 9 || centerX + roundX[2] == 9 )
 			return false;
-		else if(field[centerX + 1][centerY] != '_'  || field[centerX + x[0] + 1][centerY + y[0]] != '_'  || 
-				field[centerX + x[1] + 1][centerY + y[1]] != '_'  || field[centerX + x[2] + 1][centerY + y[2]] != '_' )
+		else if(field[centerX + 1][centerY] != '_'  || field[centerX + roundX[0] + 1][centerY + roundY[0]] != '_'  || 
+				field[centerX + roundX[1] + 1][centerY + roundY[1]] != '_'  || field[centerX + roundX[2] + 1][centerY + roundY[2]] != '_' )
 			return false;
 		return true;
 	}
@@ -322,6 +525,18 @@
 		ctx.fillText("SCORE " + score, SCORE_POS_X, SCORE_POS_Y);
 		ctx.fillText("HIGH SCORE " + highscore, HIGHSCORE_POS_X, HIGHSCORE_POS_Y);
 
+		// 状態別
+		switch(state){
+			case STATE["INTRO"] : 
+				ctx.fillText("PRESS SPACE KEY TO START !!", 80, 200);
+				break;
+			case STATE["GAME"] : 
+				drawNext();
+				break;
+			case STATE["GAMEOVER"] : 
+				ctx.fillText("GAME OVER", 80, 200);
+				break;
+		}
 	}
 
 	// フィールドの描画
@@ -358,11 +573,27 @@
 		if(type == 'F'){
 			// おきつね
 			drawChip(IMAGE_OKITSUNE, FIELD_POS_X + centerX*BLOCK_SIZE, FIELD_POS_Y + centerY*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+			// シャドーおきつね
+			if(item[0]){
+				ctx.globalAlpha = 0.3;
+				drawChip(IMAGE_OKITSUNE, FIELD_POS_X + centerX*BLOCK_SIZE, FIELD_POS_Y + shadow*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+				ctx.globalAlpha = 1.0;
+			}
 		} else {
+			// テトリミノ
 			drawBlock(centerX, centerY);
-			drawBlock(centerX + x[0], centerY + y[0]);
-			drawBlock(centerX + x[1], centerY + y[1]);
-			drawBlock(centerX + x[2], centerY + y[2]);
+			drawBlock(centerX + roundX[0], centerY + roundY[0]);
+			drawBlock(centerX + roundX[1], centerY + roundY[1]);
+			drawBlock(centerX + roundX[2], centerY + roundY[2]);
+			// シャドーテトリミノ
+			if(item[0]){
+				ctx.globalAlpha = 0.3;
+				drawBlock(centerX, shadow);
+				drawBlock(centerX + roundX[0], shadow + roundY[0]);
+				drawBlock(centerX + roundX[1], shadow + roundY[1]);
+				drawBlock(centerX + roundX[2], shadow + roundY[2]);
+				ctx.globalAlpha = 1.0;
+			}
 		}
 	}
 
@@ -370,11 +601,6 @@
 	function drawBlock(posX, posY){
 		ctx.fillStyle = getBlockColor(type);
 		ctx.fillRect(FIELD_POS_X + posX*BLOCK_SIZE, FIELD_POS_Y + posY*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-	}
-
-	// キャラチップの描画
-	function drawChip(img, posX, posY, imgX, imgY){
- 		ctx.drawImage(img, imgX*BLOCK_SIZE, imgY*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, posX, posY, BLOCK_SIZE, BLOCK_SIZE);
 	}
 
 	// テトリミノの色
@@ -394,10 +620,33 @@
 				return 'magenta';
 			case 'I' :
 				return 'cyan';
-			case 'F' :
-				return 'brown';
 			default :
 				return 'white';
 		}
 	}
-})();
+	// キャラチップの描画
+	function drawChip(img, posX, posY, imgX, imgY){
+ 		ctx.drawImage(img, imgX*BLOCK_SIZE, imgY*BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, posX, posY, BLOCK_SIZE, BLOCK_SIZE);
+	}
+	// NEXT
+	function drawNext(){
+		for(var i = 0 ; i < numNext ; i++){
+			if(next[i] == 'F')
+				drawChip(IMAGE_OKITSUNE, FIELD_POS_X + (12 + 2*i)*BLOCK_SIZE, FIELD_POS_Y + 2*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+			else
+				drawChip(IMAGE_TETROMINO, FIELD_POS_X + (12 + 2*i)*BLOCK_SIZE, FIELD_POS_Y + 2*BLOCK_SIZE, typeToInt(next[i]), 0);		
+		}
+	}
+
+	function typeToInt(i){
+		switch(i){
+			case 'O' : return 0;
+			case 'T' : return 1;
+			case 'S' : return 2;
+			case 'Z' : return 3;
+			case 'L' : return 4;
+			case 'J' : return 5;
+			case 'I' : return 6;
+		}
+	}
+})()
