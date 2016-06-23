@@ -1,5 +1,6 @@
 # OkitsuneTetris
-おきつねテトリス
+おきつねテトリス  
+https://fluffyokitsune.github.io/OkitsuneTetris/
 
 # 仕様
 ・おきつねをテトリミノで潰すと呪われ天罰を受ける  
