@@ -562,9 +562,9 @@
 		while(!dropTetromino()){
 			// 【アイテム】スコアアップ
 			if(item[6] > 0)
-				scoreAdd += 3;
+				score += 3;
 			else
-				scoreAdd += 1;
+				score += 1;
 		}
 		score += scoreAdd;
 		ctrl = true;
