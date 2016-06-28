@@ -292,7 +292,7 @@
 		var speed = level;
 
 		// 【のろい】猟犬
-		if(item[0] > 0)
+		if(curse[0] > 0)
 			speed += 10
 
 		// 【アイテム】スピードダウン
@@ -329,7 +329,7 @@
 				// サポートシャドウ
 				case 0 : 
 					if(!item[0]){
-						item[0] = 3 + Math.floor(Math.random()*4);
+						item[0] = 10;
 						return;
 					}
 				// NEXTボックス
@@ -338,7 +338,7 @@
 						item[1]++; 
 						return;
 					}
-				// NEXTボックス
+				// HOLDボックス
 				case 2 : 
 					if(item[2]<3){
 						item[2]++; 
@@ -347,25 +347,25 @@
 				// ボム
 				case 3 : 
 					if(item[3]==0){
-						item[3]++; 
+						item[3] = 1; 
 						return;
 					}
 				// スピードダウン
 				case 4 : 
 					if(item[4]==0){
-						item[4] = 3 + Math.floor(Math.random()*4); 
+						item[4] = 7; 
 						return;
 					}
 				// フィーバー
 				case 5 : 
 					if(item[5]==0){
-						item[5] = 3 + Math.floor(Math.random()*4); 
+						item[5] = 3; 
 						return;
 					}
 				// スコアアップ
 				case 6 : 
 					if(item[6]==0){
-						item[6] = 3 + Math.floor(Math.random()*4); 
+						item[6] = 7; 
 						return;
 					}
 				// おはらい
@@ -386,7 +386,7 @@
 				// いなり
 				case 8 : 
 					if(item[8]==0){
-						item[8] = 3 + Math.floor(Math.random()*4); 
+						item[8] = 3; 
 						return;
 					}
 			}
