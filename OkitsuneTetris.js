@@ -256,7 +256,7 @@
 				case 5 : return'J';
 				case 6 : return'I';
 				case 7 : 
-					// 【のろい】猟犬
+					// 【のろい】猟師
 					if(curse[0] > 0)
 						continue;
 					else 
@@ -292,7 +292,7 @@
 		var speed = level;
 
 		// 【のろい】猟犬
-		if(curse[0] > 0)
+		if(curse[1] > 0)
 			speed += 10
 
 		// 【アイテム】スピードダウン
@@ -600,8 +600,8 @@
 					var curseTurn = Math.floor(Math.random()*(5 + 1));
 					curse[curseType] = curseTurn;
 					switch(curseType){
-						// 猟犬
-						case 1 : 
+						// 猟師
+						case 0 : 
 							for(var i = 0 ; i<5 ; i++){
 								if(next[i] = 'F')
 									next[i] = randomType();
