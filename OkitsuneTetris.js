@@ -38,6 +38,7 @@
 	var clearOkitsune;	// 消したおきつねの数
 	var killedOkitsune;	// 潰したおきつねの数
 	var curse = [];		// おきつねの呪いターン数
+	var killingOkitsune // つぶしているおきつねの数
 
 	var line;			// 消したライン数
 	var score;			// スコア
@@ -46,7 +47,10 @@
 	var item = [];		// アイテムゲットフラグ
 	var shadow;			// テトリミノの影の座標
 
+	var tSpin;			// T-SPINフラグ
+
 	var okitsunise;		// おきつね化
+
 
 	// ドキュメントの設定
 	var canvas = document.getElementById('canvas');
@@ -67,6 +71,14 @@
 	// のろいアイコン画像
 	var IMAGE_CURSE_ICON = new Image();
 	IMAGE_CURSE_ICON.src = 'curse.gif';
+
+	// タイトル画像
+	var IMAGE_TITLE = new Image();
+	IMAGE_TITLE.src = 'Title.png';
+
+	// 終焉画像
+	var IMAGE_SYUEN = new Image();
+	IMAGE_SYUEN.src = 'GameOver.png';
 
 	// ----------------------------------------------------------------------
 	// イベント
@@ -97,19 +109,33 @@
 							break;
 					}
 					break;
-
 				case STATE["GAME"] : 
 					switch(key){
-					case 32 : // Space 左回転
+					case 88 : // X 右回転
 						// 【のろい】背水 でない
 						if(curse[7] == 0){
-							if(canRotate()){
+							if(canRotate('R')){
 								// 回転の計算
 								for(var i=0 ; i<3 ; i++){
-									var X = roundX[i];
-									var Y = roundY[i];
-									roundX[i] = -Y;
-									roundY[i] = X;
+									var tempX = roundX[i];
+									var tempY = roundY[i];
+									roundX[i] = tempY;
+									roundY[i] = -tempX;
+								}
+								shadow = posShadow();
+							}
+						}
+						break;
+					case 90 : // Z 左回転
+						// 【のろい】背水 でない
+						if(curse[7] == 0){
+							if(canRotate('L')){
+								// 回転の計算
+								for(var i=0 ; i<3 ; i++){
+									var tempX = roundX[i];
+									var tempY = roundY[i];
+									roundX[i] = -tempY;
+									roundY[i] = tempX;
 								}
 								shadow = posShadow();
 							}
@@ -171,19 +197,29 @@
 	}
 
 	// 開始
-	console.log("OKITSUNE TETRIS");
 	init();
 	window.requestAnimationFrame(loop);
 
 	// 回転できるか
-	function canRotate(){
+	function canRotate(dir){
 		for(var i=0 ; i<3 ; i++){
 			var X = roundX[i];
 			var Y = roundY[i];
-			var TO_X = centerX - Y;
-			var TO_Y = centerY + X;
-			if(!(0<= TO_X && TO_X<10 && 0<=TO_Y && TO_Y<20))
-				return false;
+			if(dir == 'R'){
+				var TO_X = centerX + Y;
+				var TO_Y = centerY - X;
+				if(field[TO_X][TO_Y] != '_')
+					return false;
+				if(!(0<=TO_X && TO_X<10 && 0<=TO_Y && TO_Y<20))
+					return false;
+			}else if(dir == 'L'){
+				var TO_X = centerX - Y;
+				var TO_Y = centerY + X;
+				if(field[TO_X][TO_Y] != '_')
+					return false;
+				if(!(0<=TO_X && TO_X<10 && 0<=TO_Y && TO_Y<20))
+					return false;
+			}
 		}
 		return true;
 	}
@@ -558,15 +594,16 @@
 	// テトリミノのハードドロップ
 	function hardDropTetromino(){
 		ctrl = false;
-		var scoreAdd = 0;
 		while(!dropTetromino()){
-			// 【アイテム】スコアアップ
-			if(item[6] > 0)
-				score += 3;
-			else
-				score += 1;
+			// 【のろい】虚無 でないとき有効
+			if(curse[9]==0){
+				// 【アイテム】スコアアップ
+				if(item[6] > 0)
+					score += 3;
+				else
+					score += 1;
+				}
 		}
-		score += scoreAdd;
 		ctrl = true;
 	}
 
@@ -582,6 +619,7 @@
 			// おきつねの１マス上のテトリミノが落下
 			if(field[POS_X[i]][POS_Y[i] + 1] == 'F'){
 				killedOkitsune++;
+				killingOkitsune++;
 
 				// おきつねをつぶし更地に
 				field[POS_X[i]][POS_Y[i] + 1] = '_';
@@ -595,9 +633,20 @@
 				okitsuneAnimPosY[okitsuneAnimID] = FIELD_POS_Y + (POS_Y[i] + 1)*BLOCK_SIZE;
 
 				// のろい設定
+				// 【アイテム】おはらい　がないとき有効
 				if(item[7] == 0){
-					var curseType = Math.floor(Math.random()*9);
-					var curseTurn = Math.floor(Math.random()*(5 + 1));
+					var curseType;
+					// 泡沫
+					if(killingOkitsune >= 5)
+						curseType = 11;
+					// 終焉
+					else if(killingOkitsune >= 11)
+						curseType = 12;
+					else
+						curseType = Math.floor(Math.random()*10);
+
+					var curseTurn = 1 + Math.floor(Math.random()*4);
+
 					curse[curseType] = curseTurn;
 					switch(curseType){
 						// 猟師
@@ -607,7 +656,6 @@
 									next[i] = randomType();
 							}
 							break;
-
 						// 呪縛
 						case 5 : 
 							for(var i = 0 ; i<5 ; i++){
@@ -690,9 +738,17 @@
 				curse[8]--;
 			if(curse[9] > 0)
 				curse[9]--;
+			if(curse[10] > 0){
+				score = 0;
+				curse[10]--;
+			}
+			if(curse[11] > 0){
+				state = STATE["GAMEOVER"];
+			}
 
 			// ホールド許可
 			canHold = true;
+			killingOkitsune = 0;
 			okitsunise = false;
 
 			return true;
@@ -764,28 +820,32 @@
 			}
 		}
 		line += numElaseLine;
-		// 【アイテム】スコアアップ
-		if(item[6] > 0){
-			switch(numElaseLine){
-				case 1 : 
-					score += 300;
-				case 2 : 
-					score += 750;
-				case 3 : 
-					score += 1500;
-				case 4 : 
-					score += 3000;
-			}
-		} else {
-			switch(numElaseLine){
-				case 1 : 
-					score += 100;
-				case 2 : 
-					score += 250;
-				case 3 : 
-					score += 500;
-				case 4 : 
-					score += 1000;
+
+		// 【のろい】虚無 でないとき有効
+		if(curse[9]==0){
+			// 【アイテム】スコアアップ
+			if(item[6] > 0){
+				switch(numElaseLine){
+					case 1 : 
+						score += 300;
+					case 2 : 
+						score += 750;
+					case 3 : 
+						score += 1500;
+					case 4 : 
+						score += 3000;
+				}
+			} else {
+				switch(numElaseLine){
+					case 1 : 
+						score += 100;
+					case 2 : 
+						score += 250;
+					case 3 : 
+						score += 500;
+					case 4 : 
+						score += 1000;
+				}
 			}
 		}
 		// 【のろい】背水 の解除
@@ -856,9 +916,7 @@
 			}
 		}
 
-		// 【のろい】黄昏 でないとき有効
-		if(curse[2] == 0)
-			drawTetromino();
+		drawTetromino();
 
 		// アニメの再生
 		for(var i = 0 ; i < 20 ; i++){
@@ -968,15 +1026,30 @@
 		// 状態別
 		switch(state){
 			case STATE["INTRO"] : 
+				ctx.drawImage(IMAGE_TITLE, 0, 0, 864, 120, 0, 180, 640, 100);
+				ctx.fillStyle = 'black';
+				ctx.fillText("PRESS SPACE KEY TO START !!", 80, 161);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 81, 161);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 81, 160);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 81, 159);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 80, 159);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 79, 159);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 79, 160);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 79, 161);
 				ctx.fillStyle = 'white';
-				ctx.fillText("PRESS SPACE KEY TO START !!", 80, 200);
+				ctx.fillText("PRESS SPACE KEY TO START !!", 80, 160);
 				break;
 			case STATE["GAME"] : 
 				break;
 			case STATE["GAMEOVER"] : 
 				ctx.fillStyle = 'red';
 				ctx.fillText("GAME OVER", 110, 200);
+				// 終焉
+				if(curse[11] > 0){
+					ctx.drawImage(IMAGE_SYUEN, 0, 0, 640, 480, 0, 0, 640, 480);
+				}
 				break;
+
 		}
 	}
 
@@ -987,7 +1060,7 @@
 	function drawTetromino(){
 		if(type == 'F'){
 			// シャドーおきつね
-			if(item[0]){
+			if(item[0] > 0){
 				ctx.globalAlpha = 0.3;
 				drawChip(IMAGE_OKITSUNE, FIELD_POS_X + centerX*BLOCK_SIZE, FIELD_POS_Y + shadow*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
 				if(okitsunise){	
@@ -998,15 +1071,18 @@
 				ctx.globalAlpha = 1.0;
 			}
 			// おきつね
-			drawChip(IMAGE_OKITSUNE, FIELD_POS_X + centerX*BLOCK_SIZE, FIELD_POS_Y + centerY*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
-			if(okitsunise){
-				drawChip(IMAGE_OKITSUNE, FIELD_POS_X + (centerX + roundX[0])*BLOCK_SIZE, FIELD_POS_Y + (centerY + roundY[0])*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
-				drawChip(IMAGE_OKITSUNE, FIELD_POS_X + (centerX + roundX[1])*BLOCK_SIZE, FIELD_POS_Y + (centerY + roundY[1])*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
-				drawChip(IMAGE_OKITSUNE, FIELD_POS_X + (centerX + roundX[2])*BLOCK_SIZE, FIELD_POS_Y + (centerY + roundY[2])*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+			// 【のろい】黄昏 でないとき有効
+			if(curse[2] == 0){
+				drawChip(IMAGE_OKITSUNE, FIELD_POS_X + centerX*BLOCK_SIZE, FIELD_POS_Y + centerY*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+				if(okitsunise){
+					drawChip(IMAGE_OKITSUNE, FIELD_POS_X + (centerX + roundX[0])*BLOCK_SIZE, FIELD_POS_Y + (centerY + roundY[0])*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+					drawChip(IMAGE_OKITSUNE, FIELD_POS_X + (centerX + roundX[1])*BLOCK_SIZE, FIELD_POS_Y + (centerY + roundY[1])*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+					drawChip(IMAGE_OKITSUNE, FIELD_POS_X + (centerX + roundX[2])*BLOCK_SIZE, FIELD_POS_Y + (centerY + roundY[2])*BLOCK_SIZE, (Math.floor(gametime/20))%3, 0);
+				}
 			}
 		} else {
 			// シャドーテトリミノ
-			if(item[0]){
+			if(item[0] > 0){
 				ctx.globalAlpha = 0.3;
 				drawBlock(true, type, centerX, shadow);
 				drawBlock(true, type, centerX + roundX[0], shadow + roundY[0]);
@@ -1015,10 +1091,13 @@
 				ctx.globalAlpha = 1.0;
 			}
 			// テトリミノ
-			drawBlock(false, type, centerX, centerY);
-			drawBlock(false, type, centerX + roundX[0], centerY + roundY[0]);
-			drawBlock(false, type, centerX + roundX[1], centerY + roundY[1]);
-			drawBlock(false, type, centerX + roundX[2], centerY + roundY[2]);
+			// 【のろい】黄昏 でないとき有効
+			if(curse[2] == 0){
+				drawBlock(false, type, centerX, centerY);
+				drawBlock(false, type, centerX + roundX[0], centerY + roundY[0]);
+				drawBlock(false, type, centerX + roundX[1], centerY + roundY[1]);
+				drawBlock(false, type, centerX + roundX[2], centerY + roundY[2]);
+			}
 		}
 	}
 
